@@ -815,6 +815,8 @@ always_comb begin
     if(ins_c_l1) begin
         if(((opcode == 2'b01) && (funct3 == 3'b100)) || (opcode == 2'b00))
             rs1_l1 = {2'b01, ins_l1[9 : 7]};
+        else if(opcode == 2'b10 && funct3 == 3'b100 && ins_l1[12] == 0)
+            rs1_l1 = 5'd0;       
         else
             rs1_l1 = ins_l1[11 : 7];
     end
