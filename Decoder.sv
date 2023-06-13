@@ -868,7 +868,7 @@ always_comb begin
             case(funct3)
                 3'b000: begin imm_l1 = {{25{ins_l1[10]}}, ins_l1[9:7], ins_l1[12:11], ins_l1[5], ins_l1[6]};jump_addr_l1 = 32'h00;  end //sign
                 3'b010: begin imm_l1 = {{26'b0},ins_l1[12:10],ins_l1[6],2'b00}; jump_addr_l1 = 32'h00;                      end
-                3'b110: begin imm_l1 = {{25'b0},ins_l1[12:10],ins_l1[6],2'b00}; jump_addr_l1 = 32'h00;                      end
+                3'b110: begin imm_l1 = {{26'b0},ins_l1[12:10],ins_l1[6],2'b00}; jump_addr_l1 = 32'h00;                      end
                 default:
                     begin
                         imm_l1 = 32'h00;
