@@ -929,14 +929,15 @@ always_comb begin
     end
     else if(opcode == 'b1101111) begin
         jump_addr_l1 = {{19{ins_l1[31]}}, ins_l1[19:12], ins_l1[20], ins_l1[30:21]};
-        imm_l1 = jump_addr_l1; //sign imm and jal_addr!!
+        imm_l1 = 32'h00; //sign imm and jal_addr!!
     end
     else if((opcode == 'b0100011)) begin
         imm_l1 = {20'b0, ins_l1[31 : 25], ins_l1[11 : 7]};
         jump_addr_l1 = 32'h00;  
     end
-    else    
+    else begin
         imm_l1 = 32'h00; /* 虽然这么写没问题, 但是为啥要写5个0 ^v^ check*/
         jump_addr_l1 = 32'h00;
+    end
 end
 endmodule
