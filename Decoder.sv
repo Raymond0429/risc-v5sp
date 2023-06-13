@@ -347,7 +347,6 @@ always_comb begin
                 ins_slti_l1   = 0;
                 ins_xori_l1   = 0;
                 ins_sltiu_l1  = 0;   
-                ins_ori_l1    = 0;
                 ins_andi_l1   = 0;
                 ins_slli_l1   = 0;
                 ins_srli_l1   = 0;
