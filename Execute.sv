@@ -63,7 +63,6 @@ module Execute (
 // Signal declaration
 //=================================================================================
 
-    reg [31:0] tmp;
     wire [31:0] SRA_mask;
     wire [31:0] data0;
     wire [31:0] data1;
@@ -117,33 +116,7 @@ module Execute (
     );
 
     always @(*)begin
-        unique if(ins_c_l2)begin
-            unique if (ins_jal_l2)begin
-                jump_en_l2 = 1'b1; /* ! */
-                alu_q_l2 = sumadd;
-                jump_addr_l2 = sum1;
-                clear_l1 = 1'b1;
-                clear_l2 = 1'b1;  
-            end
-            else if(ins_jalr_l2) begin
-                tmp = sum1;
-                jump_addr_l2 = alu_a_l2;
-                alu_q_l2 = tmp;
-                jump_en_l2 = 1'b1;
-                clear_l1 = 1'b1;
-                clear_l2 = 1'b1;  
-            end
-            else begin
-                alu_q_l2 = 32'b0;   
-                jump_addr_l2 = 32'b0;
-                jump_en_l2 = 1'b0;
-                clear_l1 = 1'b0;
-                clear_l2 = 1'b0;                  
-            end
-            
-
-        end
-        else if(ins_lui_l2)begin
+        unique if(ins_lui_l2)begin
             alu_q_l2 = imm_l2; /* 每个分支必须考虑所有信号, 比如在下面的标记 "!" 处, 对 jump_en_l2 进行赋值, 但是在此行的分支中却没有对 jump_en_l2 赋值, 会综合出锁存结构, 即 jump_en_l2 = jump_en_l2 */
             jump_en_l2 = 1'b0;
             jump_addr_l2 = 32'b0;
@@ -165,9 +138,8 @@ module Execute (
             clear_l2 = 1'b1;  
             end
         else if(ins_jalr_l2) begin
-            tmp = sum1;
             jump_addr_l2 = sumadd;
-            alu_q_l2 = tmp;
+            alu_q_l2 = sum1;
             jump_en_l2 = 1'b1;
             clear_l1 = 1'b1;
             clear_l2 = 1'b1;  
@@ -517,5 +489,16 @@ module Execute (
             clear_l2 = 1'b0;  
             end   
     end
+
+endmodule
+
+
+module alu_add (
+    input  wire [31:0] data0,
+    input  wire [31:0] data1,
+    output wire [31:0] ALU_result
+);
+
+    assign ALU_result = data0 + data1;
 
 endmodule
