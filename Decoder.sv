@@ -906,9 +906,13 @@ always_comb begin
                         jump_addr_l1 = 32'h00;  
                     end
             endcase
+        else begin
+            imm_l1 = 32'h00;
+            jump_addr_l1 = 32'h00;  
+        end
     end
     else if(opcode == 'b0110111 || opcode == 'b0010111) begin
-        imm_l1 = {{12'b0},ins_l1[31 : 12]};
+        imm_l1 = {ins_l1[31 : 12],12'b0};
         jump_addr_l1 = 32'h00;  
     end
     else if((opcode == 'b1100011)) begin
@@ -917,14 +921,7 @@ always_comb begin
     end
     else if((opcode == 'b0000011) || (opcode == 'b0010011)) begin
         jump_addr_l1 = 32'h00;  
-        imm_l1 = {22'b0, ins_l1[31 : 20]};
-    end
-    else if(opcode == 'b0011011) begin
-        jump_addr_l1 = 32'h00;  
-        if(funct3 == 3'b000 || funct3 == 3'b010)
-            imm_l1 = {{21{ins_l1[11]}},ins_l1[10:0]}; //sign imm
-        else    
-            imm_l1 = {22'b0, ins_l1[31 : 20]};
+        imm_l1 = {{22{ins_l1[31]}}, ins_l1[31 : 20]};
     end
     else if(opcode == 'b1101111) begin
         jump_addr_l1 = {{19{ins_l1[31]}}, ins_l1[19:12], ins_l1[20], ins_l1[30:21]};
