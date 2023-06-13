@@ -65,7 +65,7 @@ logic [6 : 0]   funct7;
 
 logic c4sp_ins_addi_l1,c_ins_lw_l1,c_ins_sw_l1;
 logic c_jump_en_l1, c_clear_l1, c_ins_addi_l1, c_ins_lui_l1, c16sp_ins_addi_l1, c_ins_srli_l1, c_ins_srai_l1, c_ins_andi_l1, c_ins_and_l1, c_ins_or_l1, c_ins_xor_l1, c_ins_sub_l1, c_ins_beq_l1, c_ins_bne_l1, csp_ins_sw_l1;
-logic c_ins_slli_l1, csp_ins_lw_l1, c_ins_jalr_l1, cmv_ins_add_l1, c_ins_add_l1;
+logic c_ins_slli_l1, csp_ins_lw_l1, c_ins_jalr_l1, cmv_ins_add_l1, c_ins_add_l1, c_ins_jal_l1;
 
 //standard ins op code
 assign ins_c_l1 = (ins_l1[1:0] == 'b11);
@@ -103,6 +103,13 @@ always_comb begin
         clear_l1 = c_clear_l1;
         jump_en_l1 = c_jump_en_l1;
     end    
+end
+
+always_comb begin
+    if(opcode == 'b1101111)
+        ins_jal_l1 = 1;
+    else 
+        ins_jal_l1 = c_ins_jal_l1;
 end
 
 always_comb begin
@@ -588,6 +595,12 @@ always_comb begin
     end
 end
 
+//c.jal
+always_comb begin
+    if(opcode[1:0] == 2'b01 || funct3 == 3'b001) c_ins_jal_l1 = 1;
+    else c_ins_jal_l1 = 0;
+end
+
 always_comb begin
     if(opcode[1 : 0] == 2'b01)
         case(funct3)
@@ -754,8 +767,22 @@ end
 always_comb begin
     if(opcode[1 : 0] == 2'b10)
         case(funct3)
-            3'b000: c_ins_slli_l1 = 1;
-            3'b010: csp_ins_lw_l1 = 1;
+            3'b000: begin
+                c_ins_slli_l1   = 1;
+                csp_ins_lw_l1   = 0;
+                c_ins_jalr_l1   = 0;
+                cmv_ins_add_l1  = 0;
+                c_ins_add_l1    = 0;
+                csp_ins_sw_l1   = 0;
+            end
+            3'b010: begin 
+                c_ins_slli_l1   = 0;
+                csp_ins_lw_l1   = 1;
+                c_ins_jalr_l1   = 0;
+                cmv_ins_add_l1  = 0;
+                c_ins_add_l1    = 0;
+                csp_ins_sw_l1   = 0;
+            end
             3'b100: begin
                     c_ins_slli_l1   = 0;
                     csp_ins_lw_l1   = 0;
@@ -838,50 +865,51 @@ end
 ///////////////////////////////////////////
 always_comb begin
     if(ins_c_l1) begin
-        jump_addr_l1 = 32'h00;  
         if(opcode[1 : 0] == 2'b00)
             case(funct3)
-                3'b000: imm_l1 = {{25{ins_l1[10]}}, ins_l1[9:7], ins_l1[12:11], ins_l1[5], ins_l1[6]}; //sign
-                3'b010: imm_l1 = {ins_l1[5],ins_l1[12:10],ins_l1[6],2'b00};
-                3'b110: imm_l1 = {ins_l1[5],ins_l1[12:10],ins_l1[6],2'b00};
+                3'b000: begin imm_l1 = {{25{ins_l1[10]}}, ins_l1[9:7], ins_l1[12:11], ins_l1[5], ins_l1[6]};jump_addr_l1 = 32'h00;  end //sign
+                3'b010: begin imm_l1 = {{26'b0},ins_l1[12:10],ins_l1[6],2'b00}; jump_addr_l1 = 32'h00;                      end
+                3'b110: begin imm_l1 = {{25'b0},ins_l1[12:10],ins_l1[6],2'b00}; jump_addr_l1 = 32'h00;                      end
                 default:
                     begin
-                        imm_l1 = 32'h00000;
+                        imm_l1 = 32'h00;
+                        jump_addr_l1 = 32'h00;  
                     end
             endcase
         else if(opcode[1 : 0] == 2'b01)
             case(funct3)
                 3'b001: 
                     begin
-                        imm_l1  = {{22{ins_l1[12]}}, ins_l1[8], ins_l1[10:9], ins_l1[6], ins_l1[7],ins_l1[2], ins_l1[11],ins_l1[5:3],1'b0};
-                        jump_addr_l1 = {{22{ins_l1[12]}}, ins_l1[8], ins_l1[10:9], ins_l1[6], ins_l1[7],ins_l1[2], ins_l1[11],ins_l1[5:3],1'b0};
+                        imm_l1  = {{21{ins_l1[12]}}, ins_l1[8], ins_l1[10:9], ins_l1[6], ins_l1[7],ins_l1[2], ins_l1[11],ins_l1[5:3],1'b0};
+                        jump_addr_l1 = {{21{ins_l1[12]}}, ins_l1[8], ins_l1[10:9], ins_l1[6], ins_l1[7],ins_l1[2], ins_l1[11],ins_l1[5:3],1'b0};
                     end
-                3'b010: imm_l1 = {ins_l1[12],ins_l1[6:2]};
+                3'b010: begin imm_l1 = {26'b0,ins_l1[12],ins_l1[6:2]}; jump_addr_l1 = 32'h00; end
                 3'b101: 
                     begin
-                        imm_l1 = {{22{ins_l1[12]}}, ins_l1[8], ins_l1[10:9], ins_l1[6], ins_l1[7],ins_l1[2], ins_l1[11],ins_l1[5:3],1'b0};
-                        jump_addr_l1 = {{22{ins_l1[12]}}, ins_l1[8], ins_l1[10:9], ins_l1[6], ins_l1[7],ins_l1[2], ins_l1[11],ins_l1[5:3],1'b0};
+                        imm_l1 = {{21{ins_l1[12]}}, ins_l1[8], ins_l1[10:9], ins_l1[6], ins_l1[7],ins_l1[2], ins_l1[11],ins_l1[5:3],1'b0};
+                        jump_addr_l1 = {{21{ins_l1[12]}}, ins_l1[8], ins_l1[10:9], ins_l1[6], ins_l1[7],ins_l1[2], ins_l1[11],ins_l1[5:3],1'b0};
                     end
-                3'b110: imm_l1 = {{25{ins_l1[12]}}, ins_l1[6:5], ins_l1[2], ins_l1[11:10], ins_l1[4:3], 1'b0};
-                3'b111: imm_l1 = {{25{ins_l1[12]}}, ins_l1[6:5], ins_l1[2], ins_l1[11:10], ins_l1[4:3], 1'b0};
+                3'b110: begin imm_l1 = {{24{ins_l1[12]}}, ins_l1[6:5], ins_l1[2], ins_l1[11:10], ins_l1[4:3], 1'b0}; jump_addr_l1 = 32'h00; end
+                3'b111: begin imm_l1 = {{24{ins_l1[12]}}, ins_l1[6:5], ins_l1[2], ins_l1[11:10], ins_l1[4:3], 1'b0}; jump_addr_l1 = 32'h00; end
                 default:
                     begin
-                        imm_l1 = 32'h00000;
-                        jump_addr_l1 = 32'h00000;
+                        imm_l1 = 32'h00;
+                        jump_addr_l1 = 32'h00;
                     end
             endcase
         else if(opcode[1 : 0] == 2'b10)
             case(funct3)
-                3'b010: imm_l1 = {ins_l1[3:2], ins_l1[12], ins_l1[6:4],2'b00};
-                3'b110: imm_l1 = {ins_l1[8:7], ins_l1[11:9], 2'b00};
+                3'b010: begin imm_l1 = {{24'b0},ins_l1[3:2], ins_l1[12], ins_l1[6:4],2'b00}; jump_addr_l1 = 32'h00;  end           
+                3'b110: begin imm_l1 = {{25'b0}, ins_l1[8:7], ins_l1[11:9], 2'b00};           jump_addr_l1 = 32'h00;  end   
                 default:
                     begin
-                        imm_l1 = 32'h00000;
+                        imm_l1 = 32'h00;
+                        jump_addr_l1 = 32'h00;  
                     end
             endcase
     end
     else if(opcode == 'b0110111 || opcode == 'b0010111) begin
-        imm_l1 = ins_l1[31 : 12];
+        imm_l1 = {{12'b0},ins_l1[31 : 12]};
         jump_addr_l1 = 32'h00;  
     end
     else if((opcode == 'b1100011)) begin
@@ -890,21 +918,21 @@ always_comb begin
     end
     else if((opcode == 'b0000011) || (opcode == 'b0010011)) begin
         jump_addr_l1 = 32'h00;  
-        imm_l1 = ins_l1[31 : 20];
+        imm_l1 = {22'b0, ins_l1[31 : 20]};
     end
     else if(opcode == 'b0011011) begin
         jump_addr_l1 = 32'h00;  
         if(funct3 == 3'b000 || funct3 == 3'b010)
             imm_l1 = {{21{ins_l1[11]}},ins_l1[10:0]}; //sign imm
         else    
-            imm_l1 = ins_l1[31 : 20];
+            imm_l1 = {22'b0, ins_l1[31 : 20]};
     end
     else if(opcode == 'b1101111) begin
         jump_addr_l1 = {{19{ins_l1[31]}}, ins_l1[19:12], ins_l1[20], ins_l1[30:21]};
         imm_l1 = jump_addr_l1; //sign imm and jal_addr!!
     end
     else if((opcode == 'b0100011)) begin
-        imm_l1 = {ins_l1[31 : 25], ins_l1[11 : 7]};
+        imm_l1 = {20'b0, ins_l1[31 : 25], ins_l1[11 : 7]};
         jump_addr_l1 = 32'h00;  
     end
     else    
