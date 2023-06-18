@@ -19,6 +19,9 @@ module ForwardCtrl (
     output wire [31:0] alu_b_l2
 
 );
-
+	
+	assign alu_a_l2 = ((rs1_l2 == rd_l3) && rs1_l2 != 5'd0)? wval_l3: xrs1_l2; //当 rs1_l2 == rd_l3 时, wval前递 alu_a,为x0不前递
+	assign alu_b_l2 = ((rs2_l2 == rd_l3) && rs2_l2 != 5'd0)? wval_l3: xrs2_l2; //当 rs2_l2 == rd_l3 时, wval前递 alu_b,为x0不前递
+	
 
 endmodule

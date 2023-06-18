@@ -8,8 +8,9 @@
     当指令为压缩指令时, ins_c = 1 
 */
 
-module Decoder (
+module Decode (
     input  logic [31:0] ins_l1,
+    input  logic [31:0] pc_l1,
     output logic [31:0] imm_l1,
     output logic [ 4:0] rd_l1,
     output logic [ 4:0] rs1_l1,
@@ -57,883 +58,257 @@ module Decoder (
     output logic        ins_and_l1
 );
 
-logic [6 : 0]   opcode;
-logic [2: 0]    funct3;
-logic [3 : 0]   funct4;
-logic [5 : 0]   funct6;
-logic [6 : 0]   funct7;
+    wire [1:0] c_opcode = ins_l1[1:0];
+    assign ins_c_l1 = c_opcode != 2'b11;
 
-logic c4sp_ins_addi_l1,c_ins_lw_l1,c_ins_sw_l1;
-logic c_jump_en_l1, c_clear_l1, c_ins_addi_l1, c_ins_lui_l1, c16sp_ins_addi_l1, c_ins_srli_l1, c_ins_srai_l1, c_ins_andi_l1, c_ins_and_l1, c_ins_or_l1, c_ins_xor_l1, c_ins_sub_l1, c_ins_beq_l1, c_ins_bne_l1, csp_ins_sw_l1;
-logic c_ins_slli_l1, csp_ins_lw_l1, c_ins_jalr_l1, cmv_ins_add_l1, c_ins_add_l1, c_ins_jal_l1;
+    wire [6:0] opcode = ins_l1[6:0];
+    wire [2:0] funct3 = ins_l1[14:12];
+    wire [6:0] funct7 = ins_l1[31:25];
 
-//standard ins op code
-assign ins_c_l1 = (ins_l1[1:0] == 'b11);
-assign opcode = (ins_c_l1) ? {5'b0,ins_l1[1:0]} : ins_l1[6 : 0]; /* 位数注意, 压缩指令的 opcode 可以补0 */ // check 
-assign funct3 = (ins_c_l1) ? ins_l1[15 : 13] : ins_l1[14 : 12];
-assign funct7 = ins_l1[31 : 25];
+    wire has_rd;
 
-//only C-ins op code
-//assign funct4 = ins_l1[15 : 12];
-//assign funct6 = ins_l1[15 : 10];
+    wire [4:0] rd = has_rd ? ins_l1[11:7] : 5'd0;
+    wire [4:0] rs1 = ins_l1[19:15];
+    wire [4:0] rs2 = ins_l1[24:20];
 
-///////////////////////////////////////////
-//standard ins decode
-///////////////////////////////////////////
-always_comb begin
-    if(opcode == 7'b0110111)
-        ins_lui_l1 = 1;
-    else
-        ins_lui_l1 = c_ins_lui_l1;    
-end
+    wire funct3_000 = funct3 == 3'b000;
+    wire funct3_001 = funct3 == 3'b001;
+    wire funct3_010 = funct3 == 3'b010;
+    wire funct3_011 = funct3 == 3'b011;
+    wire funct3_100 = funct3 == 3'b100;
+    wire funct3_101 = funct3 == 3'b101;
+    wire funct3_110 = funct3 == 3'b110;
+    wire funct3_111 = funct3 == 3'b111;
 
-always_comb begin
-    if(opcode == 'b0010111)
-        ins_auipc_l1 = 1;
-    else
-        ins_auipc_l1 = 0;    
-end
+    wire funct7_00 = funct7 == 7'b0000000;
+    wire funct7_01 = funct7 == 7'b0100000;
 
-always_comb begin 
-    if(opcode == 'b1101111) begin
-        clear_l1 = 1;
-        jump_en_l1 = 1;
-    end
-    else begin
-        clear_l1 = c_clear_l1;
-        jump_en_l1 = c_jump_en_l1;
-    end    
-end
+    wire ins_lui = opcode == 7'b0110111;
+    wire ins_auipc = opcode == 7'b0010111;
+    wire type_u = ins_lui || ins_auipc;
 
-always_comb begin
-    if(opcode == 'b1101111)
-        ins_jal_l1 = 1;
-    else 
-        ins_jal_l1 = c_ins_jal_l1;
-end
+    wire ins_jal = opcode == 7'b1101111;
+    wire type_uj = ins_jal;
 
-always_comb begin
-    if(opcode == 'b1100111)
-        ins_jalr_l1 = 1;
-    else
-        ins_jalr_l1 = c_ins_jalr_l1;    
-end
+    wire ins_jalr = opcode == 7'b1100111;
+    wire type_i_jalr = ins_jalr;
 
-always_comb begin
-    if(opcode == 'b1100011)
-        unique if (funct3 == 'b000) begin /* 建议使用 unique if 优化时序 check*/
-            ins_beq_l1  = 1;  /* 这样写是无法通过综合的, 比如说此分支成立时的 ins_bne_l1 信号是几你并没有定义, 包括后面写的 if 和 case 都有同样的问题 check*/
-            ins_bne_l1  = 0; 
-            ins_blt_l1  = 0; 
-            ins_bge_l1  = 0; 
-            ins_bltu_l1 = 0;    
-            ins_bgeu_l1 = 0;
-        end
-        else if(funct3 == 'b001)begin
-            ins_beq_l1  = 0;  
-            ins_bne_l1 = 1;
-            ins_blt_l1  = 0; 
-            ins_bge_l1  = 0; 
-            ins_bltu_l1 = 0;    
-            ins_bgeu_l1 = 0;
-        end
-        else if(funct3 == 'b100) begin
-            ins_blt_l1 = 1;
-            ins_beq_l1  = 0;   
-            ins_bne_l1  = 0; 
-            ins_bge_l1  = 0; 
-            ins_bltu_l1 = 0;    
-            ins_bgeu_l1 = 0;
-        end
-        else if(funct3 == 'b101) begin
-            ins_bge_l1 = 1;
-            ins_beq_l1  = 0;   
-            ins_bne_l1  = 0; 
-            ins_blt_l1  = 0; 
-            ins_bltu_l1 = 0;    
-            ins_bgeu_l1 = 0;
-        end
-        else if(funct3 == 'b110) begin
-            ins_bltu_l1 = 1;
-            ins_beq_l1  = 0;   
-            ins_bne_l1  = 0; 
-            ins_blt_l1  = 0; 
-            ins_bge_l1  = 0;   
-            ins_bgeu_l1 = 0;
-        end
-        else if(funct3 == 'b111) begin
-            ins_bgeu_l1 = 1; 
-            ins_beq_l1  = 0;   
-            ins_bne_l1  = 0; 
-            ins_blt_l1  = 0; 
-            ins_bge_l1  = 0; 
-            ins_bltu_l1 = 0; 
-        end
-        else begin
-            ins_beq_l1  = 0;   
-            ins_bne_l1  = 0; 
-            ins_blt_l1  = 0; 
-            ins_bge_l1  = 0; 
-            ins_bltu_l1 = 0;    
-            ins_bgeu_l1 = 0;
-        end
-    else begin
-        ins_beq_l1  = c_ins_beq_l1;   
-        ins_bne_l1  = c_ins_bne_l1; 
-        ins_blt_l1  = 0; 
-        ins_bge_l1  = 0; 
-        ins_bltu_l1 = 0;    
-        ins_bgeu_l1 = 0;
-    end
-end
+    wire type_sb = opcode == 7'b1100011;
+    wire ins_beq = type_sb && funct3_000;
+    wire ins_bne = type_sb && funct3_001;
+    wire ins_blt = type_sb && funct3_100;
+    wire ins_bge = type_sb && funct3_101;
+    wire ins_bltu = type_sb && funct3_110;
+    wire ins_bgeu = type_sb && funct3_111;
 
-//TODO: whether ins have priority or it doesn't matter?
-always_comb begin
-    if(opcode == 'b0000011)
-        unique if(funct3 == 'b000) begin
-            ins_lb_l1   = 1;
-            ins_lh_l1   = 0; 
-            ins_lw_l1   = 0;
-            ins_lbu_l1  = 0;
-            ins_lhu_l1  = 0;
-        end
-        else if(funct3 == 'b001) begin
-            ins_lh_l1   = 1;
-            ins_lb_l1   = 0;
-            ins_lw_l1   = 0;
-            ins_lbu_l1  = 0;
-            ins_lhu_l1  = 0;
-        end
-        else if(funct3 == 'b010) begin
-            ins_lw_l1   = 1;
-            ins_lb_l1   = 0;
-            ins_lh_l1   = 0; 
-            ins_lbu_l1  = 0;
-            ins_lhu_l1  = 0;
-        end
-        else if(funct3 == 'b100) begin
-            ins_lbu_l1 = 1;
-            ins_lb_l1   = 0;
-            ins_lh_l1   = 0; 
-            ins_lw_l1   = 0;
-            ins_lhu_l1  = 0;
-        end
-        else if(funct3 == 'b101) begin
-            ins_lhu_l1  = 1;
-            ins_lb_l1   = 0;
-            ins_lh_l1   = 0; 
-            ins_lw_l1   = 0;
-            ins_lbu_l1  = 0;
-        end
-        else begin
-            ins_lb_l1   = 0;
-            ins_lh_l1   = 0; 
-            ins_lw_l1   = 0;
-            ins_lbu_l1  = 0;
-            ins_lhu_l1  = 0;
-        end
-    else begin
-        ins_lb_l1   = 0;
-        ins_lh_l1   = 0; 
-        ins_lw_l1   = c_ins_lw_l1 | csp_ins_lw_l1;
-        ins_lbu_l1  = 0;
-        ins_lhu_l1  = 0;
-    end
-end
+    wire type_i_ld = opcode == 7'b0000011;
+    wire ins_lb = type_i_ld && funct3_000;
+    wire ins_lh = type_i_ld && funct3_001;
+    wire ins_lw = type_i_ld && funct3_010;
+    wire ins_lbu = type_i_ld && funct3_100;
+    wire ins_lhu = type_i_ld && funct3_101;
 
-always_comb begin
-    if(opcode == 'b0100011)
-        if(funct3 == 'b000) begin
-            ins_sb_l1   = 1;
-            ins_sh_l1   = 0;        
-            ins_sw_l1   = 0;
-        end
-        else if(funct3 == 'b001) begin
-            ins_sh_l1   = 1;
-            ins_sb_l1   = 0;          
-            ins_sw_l1   = 0;
-        end
-        else if(funct3 == 'b010) begin
-            ins_sw_l1   = 1;
-            ins_sb_l1   = 0;    
-            ins_sh_l1   = 0;
-        end
-        else begin
-            ins_sb_l1   = 0;    
-            ins_sh_l1   = 0;        
-            ins_sw_l1   = 0;   
-        end
-    else begin
-        ins_sb_l1   = 0;    
-        ins_sh_l1   = 0;        
-        ins_sw_l1   = c_ins_sw_l1 | csp_ins_sw_l1;   
-    end
-end
+    wire type_s = opcode == 7'b0100011;
+    wire ins_sb = type_s && funct3_000;
+    wire ins_sh = type_s && funct3_001;
+    wire ins_sw = type_s && funct3_010;
 
-//TODO: whether used case function
-always_comb begin
-    if(opcode == 'b0010011)
-        case(funct3)
-            3'b000: begin
-                ins_addi_l1   = 1;
-                ins_slti_l1   = 0;
-                ins_xori_l1   = 0;
-                ins_sltiu_l1  = 0;   
-                ins_ori_l1    = 0;
-                ins_andi_l1   = 0;
-                ins_slli_l1   = 0;
-                ins_srli_l1   = 0;
-                ins_srai_l1   = 0;
-            end
-            3'b001:  begin
-                ins_slli_l1   = 1; 
-                ins_addi_l1   = 0;
-                ins_slti_l1   = 0;
-                ins_xori_l1   = 0;
-                ins_sltiu_l1  = 0;   
-                ins_ori_l1    = 0;
-                ins_andi_l1   = 0;
-                ins_srli_l1   = 0;
-                ins_srai_l1   = 0;
-            end
-            3'b010: begin
-                ins_slti_l1   = 1;
-                ins_addi_l1   = 0;
-                ins_xori_l1   = 0;
-                ins_sltiu_l1  = 0;   
-                ins_ori_l1    = 0;
-                ins_andi_l1   = 0;
-                ins_slli_l1   = 0;
-                ins_srli_l1   = 0;
-                ins_srai_l1   = 0;
-            end 
-            3'b011: begin
-                ins_sltiu_l1  = 1;
-                ins_addi_l1   = 0;
-                ins_slti_l1   = 0;
-                ins_xori_l1   = 0;   
-                ins_ori_l1    = 0;
-                ins_andi_l1   = 0;
-                ins_slli_l1   = 0;
-                ins_srli_l1   = 0;
-                ins_srai_l1   = 0;
-            end 
-            3'b100: begin 
-                    ins_xori_l1 = 1;
-                    ins_addi_l1   = 0;
-                    ins_slti_l1   = 0;
-                    ins_sltiu_l1  = 0;   
-                    ins_ori_l1    = 0;
-                    ins_andi_l1   = 0;
-                    ins_slli_l1   = 0;
-                    ins_srli_l1   = 0;
-                    ins_srai_l1   = 0;
-            end
-            3'b101: begin
-                ins_addi_l1   = 0;
-                ins_slti_l1   = 0;
-                ins_xori_l1   = 0;
-                ins_sltiu_l1  = 0;   
-                ins_ori_l1    = 0;
-                ins_andi_l1   = 0;
-                ins_slli_l1   = 0;
-                unique if(funct7[5] == 'b0) begin ins_srli_l1 = 1; ins_srai_l1 = 0; end
-                else if(funct7[5] == 'b1)   begin ins_srli_l1 = 0; ins_srai_l1 = 1; end
-                else                        begin ins_srli_l1 = 0; ins_srai_l1 = 0; end
-            end 
-            3'b110: begin 
-                ins_ori_l1    = 1;
-                ins_addi_l1   = 0;
-                ins_slti_l1   = 0;
-                ins_xori_l1   = 0;
-                ins_sltiu_l1  = 0;   
-                ins_andi_l1   = 0;
-                ins_slli_l1   = 0;
-                ins_srli_l1   = 0;
-                ins_srai_l1   = 0;
-            end
-            3'b111: begin
-                ins_andi_l1   = 1;
-                ins_addi_l1   = 0;
-                ins_slti_l1   = 0;
-                ins_xori_l1   = 0;
-                ins_sltiu_l1  = 0;   
-                ins_ori_l1    = 0;
-                ins_slli_l1   = 0;
-                ins_srli_l1   = 0;
-                ins_srai_l1   = 0;
-            end
-            default:   
-                begin
-                    ins_addi_l1   = 0;
-                    ins_slti_l1   = 0;
-                    ins_xori_l1   = 0;
-                    ins_sltiu_l1  = 0;   
-                    ins_ori_l1    = 0;
-                    ins_andi_l1   = 0;
-                    ins_slli_l1   = 0;
-                    ins_srli_l1   = 0;
-                    ins_srai_l1   = 0;
-                end
-        endcase
-    //    if(funct3 == 'b000)
-    //        ins_addi_l1 = 1;
-    //    else if(funct3 == 'b010)
-    //        ins_slti_l1 = 1;
-    //    else if(funct3 == 'b011)
-    //        ins_sltiu_l1 = 1;
-    //    else if(funct3 == 'b100)
-    //        ins_xori_l1 = 1;
-    //    else if(funct3 == 'b110)
-    //        ins_ori_l1 = 1;
-    //    else if(funct3 == 'b111)
-    //        ins_andi_l1 = 1;
-    //    else if(funct3 == 'b001)
-    //        ins_slli_l1 = 1;
-    //    else if(funct3 == 'b101)
-    //        if(funct7[5] == 'b0)
-    //            ins_srli_l1 = 1;
-    //        else if(funct7[5] == 'b1)
-    //            ins_srai_l1 = 1;
-    else begin
-        ins_addi_l1   = c_ins_addi_l1 | c4sp_ins_addi_l1 | c16sp_ins_addi_l1;
-        ins_slti_l1   = 0;
-        ins_xori_l1   = 0;
-        ins_sltiu_l1  = 0;   
-        ins_ori_l1    = 0;
-        ins_andi_l1   = c_ins_andi_l1;
-        ins_slli_l1   = c_ins_slli_l1;
-        ins_srli_l1   = c_ins_srli_l1;
-        ins_srai_l1   = c_ins_srai_l1;
-    end   
-end
+    wire type_i_ai = opcode == 7'b0010011;
+    wire type_i = type_i_jalr || type_i_ld || type_i_ai;
+    wire ins_addi = type_i_ai && funct3_000;
+    wire ins_slti = type_i_ai && funct3_010;
+    wire ins_sltiu = type_i_ai && funct3_011;
+    wire ins_xori = type_i_ai && funct3_100;
+    wire ins_ori = type_i_ai && funct3_110;
+    wire ins_andi = type_i_ai && funct3_111;
+    wire ins_slli = type_i_ai && funct3_001 && funct7_00;
+    wire ins_srli = type_i_ai && funct3_101 && funct7_00;
+    wire ins_srai = type_i_ai && funct3_101 && funct7_01;
 
-always_comb begin
-    if(opcode == 'b0110011)
-        case(funct3)
-            3'b000: begin 
-                unique if(funct7[5] == 'b0) begin ins_add_l1 = 1; ins_sub_l1 = 0; end
-                else if(funct7[5] == 'b1)   begin ins_sub_l1 = 1; ins_add_l1 = 0; end
-                else                        begin ins_add_l1 = 0; ins_sub_l1 = 0; end
-                ins_sll_l1  = 0;
-                ins_slt_l1  = 0;
-                ins_sltu_l1 = 0;
-                ins_xor_l1  = 0;
-                ins_srl_l1  = 0;
-                ins_sra_l1  = 0;
-                ins_or_l1   = 0;
-                ins_and_l1  = 0;
-            end
-            3'b001: 
-                begin
-                    ins_add_l1  = 0;
-                    ins_sub_l1  = 0;
-                    ins_sll_l1  = 1;
-                    ins_slt_l1  = 0;
-                    ins_sltu_l1 = 0;
-                    ins_xor_l1  = 0;
-                    ins_srl_l1  = 0;
-                    ins_sra_l1  = 0;
-                    ins_or_l1   = 0;
-                    ins_and_l1  = 0;
-                end
-            3'b010: 
-                begin
-                    ins_add_l1  = 0;
-                    ins_sub_l1  = 0;
-                    ins_sll_l1  = 0;
-                    ins_slt_l1  = 1;
-                    ins_sltu_l1 = 0;
-                    ins_xor_l1  = 0;
-                    ins_srl_l1  = 0;
-                    ins_sra_l1  = 0;
-                    ins_or_l1   = 0;
-                    ins_and_l1  = 0;
-                end
-            3'b011: 
-                begin
-                    ins_add_l1  = 0;
-                    ins_sub_l1  = 0;
-                    ins_sll_l1  = 0;
-                    ins_slt_l1  = 0;
-                    ins_sltu_l1 = 1;
-                    ins_xor_l1  = 0;
-                    ins_srl_l1  = 0;
-                    ins_sra_l1  = 0;
-                    ins_or_l1   = 0;
-                    ins_and_l1  = 0;
-                end
-            3'b100: 
-                begin
-                    ins_add_l1  = 0;
-                    ins_sub_l1  = 0;
-                    ins_sll_l1  = 0;
-                    ins_slt_l1  = 0;
-                    ins_sltu_l1 = 0;
-                    ins_xor_l1  = 1;
-                    ins_srl_l1  = 0;
-                    ins_sra_l1  = 0;
-                    ins_or_l1   = 0;
-                    ins_and_l1  = 0;
-                end
-            3'b101: 
-                begin
-                    ins_add_l1  = 0;
-                    ins_sub_l1  = 0;
-                    ins_sll_l1  = 0;
-                    ins_slt_l1  = 0;
-                    ins_sltu_l1 = 0;
-                    ins_xor_l1  = 0;
-                    unique if(funct7[5] == 0)   begin ins_srl_l1 = 1; ins_sra_l1 = 0; end
-                    else if(funct7[5] == 1)     begin ins_sra_l1 = 1; ins_srl_l1 = 0; end
-                    else                        begin ins_srl_l1 = 0; ins_sra_l1 = 0; end
-                    ins_or_l1   = 0;
-                    ins_and_l1  = 0;
-                end
-            3'b110: 
-                begin
-                    ins_add_l1  = 0;
-                    ins_sub_l1  = 0;
-                    ins_sll_l1  = 0;
-                    ins_slt_l1  = 0;
-                    ins_sltu_l1 = 0;
-                    ins_xor_l1  = 0;
-                    ins_srl_l1  = 0;
-                    ins_sra_l1  = 0;
-                    ins_or_l1   = 1;
-                    ins_and_l1  = 0;
-                end
-            3'b111:
-                begin
-                    ins_add_l1  = 0;
-                    ins_sub_l1  = 0;
-                    ins_sll_l1  = 0;
-                    ins_slt_l1  = 0;
-                    ins_sltu_l1 = 0;
-                    ins_xor_l1  = 0;
-                    ins_srl_l1  = 0;
-                    ins_sra_l1  = 0;
-                    ins_or_l1   = 0;
-                    ins_and_l1  = 1;
-                end
-            default:
-                begin
-                    ins_add_l1  = 0;
-                    ins_sub_l1  = 0;
-                    ins_sll_l1  = 0;
-                    ins_slt_l1  = 0;
-                    ins_sltu_l1 = 0;
-                    ins_xor_l1  = 0;
-                    ins_srl_l1  = 0;
-                    ins_sra_l1  = 0;
-                    ins_or_l1   = 0;
-                    ins_and_l1  = 0;
-                end
-        endcase
-        //if(funct3 == 'b000)
-        //    if(funct7[5] == 'b0)
-        //        ins_add_l1 = 1;
-        //    else if(funct7[5] == 'b1)
-        //        ins_sub_l1 = 1;
-        //else if(funct3 == 'b001)
-        //    ins_sll_l1 = 1;
-        //else if(funct3 == 'b010)
-        //    ins_slt_l1 = 1;
-        //else if(funct3 == 'b011)
-        //    ins_sltu_l1 = 1;
-        //else if(funct3 == 'b100)
-        //    ins_xor_l1 = 1;
-        //else if(funct3 == 'b101)
-        //    ins_srl_l1 = 1;
-    else begin
-        ins_sll_l1  = 0;
-        ins_slt_l1  = 0;
-        ins_sltu_l1 = 0;
-        ins_xor_l1  = c_ins_xor_l1;
-        ins_srl_l1  = 0;
-        ins_sra_l1  = 0;
-        ins_or_l1   = c_ins_or_l1;
-        ins_and_l1  = c_ins_and_l1;
-        ins_sub_l1  = c_ins_sub_l1;
-        ins_add_l1  = c_ins_add_l1 | cmv_ins_add_l1;
-    end
-end
+    wire type_r = opcode == 7'b0110011;
+    wire ins_add = type_r && funct3_000 && funct7_00;
+    wire ins_sub = type_r && funct3_000 && funct7_01;
+    wire ins_sll = type_r && funct3_001 && funct7_00;
+    wire ins_slt = type_r && funct3_010 && funct7_00;
+    wire ins_sltu = type_r && funct3_011 && funct7_00;
+    wire ins_xor = type_r && funct3_100 && funct7_00;
+    wire ins_srl = type_r && funct3_101 && funct7_00;
+    wire ins_sra = type_r && funct3_101 && funct7_01;
+    wire ins_or = type_r && funct3_110 && funct7_00;
+    wire ins_and = type_r && funct3_111 && funct7_00;
 
-///////////////////////////////////////////
-//compression ins decode
-///////////////////////////////////////////
-always_comb begin
-    if(opcode[1 : 0] == 2'b00)
-        case(funct3)
-            3'b000: begin
-                c4sp_ins_addi_l1    = 1;
-                c_ins_lw_l1         = 0;
-                c_ins_sw_l1         = 0;
-            end
-            3'b010: begin
-                c4sp_ins_addi_l1    = 0;
-                c_ins_lw_l1         = 1;
-                c_ins_sw_l1         = 0;  
-            end
-            3'b110: begin
-                c4sp_ins_addi_l1    = 0;
-                c_ins_lw_l1         = 0;
-                c_ins_sw_l1         = 1;
-            end
-            default:
-                begin
-                    c4sp_ins_addi_l1 = 0;
-                    c_ins_lw_l1 = 0;
-                    c_ins_sw_l1 = 0;
-                end
-        endcase
-    else begin
-        c4sp_ins_addi_l1 = 0;
-        c_ins_lw_l1 = 0;
-        c_ins_sw_l1 = 0;
-    end
-end
+    wire [31:0] imm =
+        (type_i                             ? {{20{ins_l1[31]}}, ins_l1[31:20]}                                             : 32'd0) |
+        (type_s                             ? {{20{ins_l1[31]}}, ins_l1[31:25], ins_l1[11:7]}                               : 32'd0) |
+        (type_sb                            ? {{19{ins_l1[31]}}, ins_l1[31], ins_l1[7], ins_l1[30:25], ins_l1[11:8], 1'b0}  : 32'd0) |
+        (type_u                             ? {ins_l1[31:12], 12'd0}                                                        : 32'd0) |
+        (type_uj                            ? {{11{ins_l1[31]}}, ins_l1[31], ins_l1[19:12], ins_l1[20], ins_l1[30:21], 1'b0}: 32'd0) |
+        ((ins_srli || ins_srai || ins_slli) ? {27'd0, ins_l1[24:20]}                                                        : 32'd0)
+    ;
 
-//c.jal
-always_comb begin
-    if(opcode[1:0] == 2'b01 || funct3 == 3'b001) c_ins_jal_l1 = 1;
-    else c_ins_jal_l1 = 0;
-end
+    assign has_rd = type_r || type_i || type_u || type_uj;
 
-always_comb begin
-    if(opcode[1 : 0] == 2'b01)
-        case(funct3)
-            3'b001: begin 
-                c_jump_en_l1        = 1; 
-                c_clear_l1          = 1; 
-                c_ins_addi_l1       = 0;     
-                c_ins_lui_l1        = 0;     
-                c16sp_ins_addi_l1   = 0;         
-                c_ins_srli_l1       = 0;     
-                c_ins_srai_l1       = 0;     
-                c_ins_andi_l1       = 0;     
-                c_ins_and_l1        = 0;     
-                c_ins_or_l1         = 0;     
-                c_ins_xor_l1        = 0;     
-                c_ins_sub_l1        = 0;     
-                c_ins_beq_l1        = 0;     
-                c_ins_bne_l1        = 0; 
-            end //TODO: rd is x0
-            3'b010: begin
-                c_jump_en_l1        = 0;     
-                c_clear_l1          = 0; 
-                c_ins_addi_l1       = 1;     
-                c_ins_lui_l1        = 0;     
-                c16sp_ins_addi_l1   = 0;         
-                c_ins_srli_l1       = 0;     
-                c_ins_srai_l1       = 0;     
-                c_ins_andi_l1       = 0;     
-                c_ins_and_l1        = 0;     
-                c_ins_or_l1         = 0;     
-                c_ins_xor_l1        = 0;     
-                c_ins_sub_l1        = 0;     
-                c_ins_beq_l1        = 0;     
-                c_ins_bne_l1        = 0;    
-            end
-            3'b011: begin
-                unique if(rd_l1 == 'd2) begin c_ins_lui_l1 = 1; c16sp_ins_addi_l1 = 0; end
-                else if(rd_l1 != 'd0)   begin c16sp_ins_addi_l1 = 1; c_ins_lui_l1 = 0; end
-                else                    begin c_ins_lui_l1 = 0; c16sp_ins_addi_l1 = 0; end
-                c_jump_en_l1        = 0;     
-                c_clear_l1          = 0; 
-                c_ins_addi_l1       = 0;             
-                c_ins_srli_l1       = 0;     
-                c_ins_srai_l1       = 0;     
-                c_ins_andi_l1       = 0;     
-                c_ins_and_l1        = 0;     
-                c_ins_or_l1         = 0;     
-                c_ins_xor_l1        = 0;     
-                c_ins_sub_l1        = 0;     
-                c_ins_beq_l1        = 0;     
-                c_ins_bne_l1        = 0;
-            end
-            3'b100: begin 
-                c_jump_en_l1        = 0;     
-                c_clear_l1          = 0; 
-                c_ins_addi_l1       = 0;     
-                c_ins_lui_l1        = 0;     
-                c16sp_ins_addi_l1   = 0; 
-                unique if(ins_l1[11:10] == 2'b00)                           begin c_ins_srli_l1 = 1; c_ins_srai_l1 = 0; c_ins_andi_l1 = 0; c_ins_or_l1 = 0; c_ins_xor_l1 = 0; c_ins_sub_l1 = 0; c_ins_and_l1 = 0; end
-                else if(ins_l1[11:10] == 2'b01)                             begin c_ins_srai_l1 = 1; c_ins_srli_l1 = 0; c_ins_andi_l1 = 0; c_ins_or_l1 = 0; c_ins_xor_l1 = 0; c_ins_sub_l1 = 0; c_ins_and_l1 = 0; end
-                else if(ins_l1[11:10] == 'b10)                              begin c_ins_andi_l1 = 1; c_ins_srli_l1 = 0; c_ins_srai_l1 = 0; c_ins_or_l1 = 0; c_ins_xor_l1 = 0; c_ins_sub_l1 = 0; c_ins_and_l1 = 0; end
-                else if((ins_l1[12:10] == 'b011) && (ins_l1[6:5] == 'b11))  begin c_ins_and_l1 = 1;  c_ins_srli_l1 = 0; c_ins_srai_l1 = 0; c_ins_andi_l1 = 0; c_ins_or_l1 = 0; c_ins_xor_l1 = 0; c_ins_sub_l1 = 0; end
-                else if((ins_l1[12:10] == 'b011) && (ins_l1[6:5] == 'b10))  begin c_ins_or_l1 = 1;   c_ins_srli_l1 = 0; c_ins_srai_l1 = 0; c_ins_andi_l1 = 0; c_ins_xor_l1 = 0; c_ins_sub_l1 = 0; c_ins_and_l1 = 0; end
-                else if((ins_l1[12:10] == 'b011) && (ins_l1[6:5] == 'b01))  begin c_ins_xor_l1 = 1;  c_ins_srli_l1 = 0; c_ins_srai_l1 = 0; c_ins_andi_l1 = 0; c_ins_or_l1 = 0; c_ins_sub_l1 = 0; c_ins_and_l1 = 0; end
-                else if((ins_l1[12:10] == 'b011) && (ins_l1[6:5] == 'b00))  begin c_ins_sub_l1 = 1;  c_ins_srli_l1 = 0; c_ins_srai_l1 = 0; c_ins_andi_l1 = 0; c_ins_or_l1 = 0; c_ins_xor_l1 = 0; c_ins_and_l1 = 0; end
-                else begin
-                    c_ins_and_l1    = 0;
-                    c_ins_or_l1     = 0;
-                    c_ins_xor_l1    = 0;
-                    c_ins_sub_l1    = 0;
-                    c_ins_srli_l1   = 0;
-                    c_ins_srai_l1   = 0;
-                    c_ins_andi_l1   = 0;
-                end
-                c_ins_beq_l1        = 0;     
-                c_ins_bne_l1        = 0; 
-            end
-            3'b101: begin 
-                c_jump_en_l1        = 1; 
-                c_clear_l1          = 1; 
-                c_ins_addi_l1       = 0;     
-                c_ins_lui_l1        = 0;     
-                c16sp_ins_addi_l1   = 0;         
-                c_ins_srli_l1       = 0;     
-                c_ins_srai_l1       = 0;     
-                c_ins_andi_l1       = 0;     
-                c_ins_and_l1        = 0;     
-                c_ins_or_l1         = 0;     
-                c_ins_xor_l1        = 0;     
-                c_ins_sub_l1        = 0;     
-                c_ins_beq_l1        = 0;     
-                c_ins_bne_l1        = 0;  
-            end //TODO: rd is x1
-            3'b110: 
-                begin
-                    c_jump_en_l1        = 0;     
-                    c_clear_l1          = 0; 
-                    c_ins_addi_l1       = 0;     
-                    c_ins_lui_l1        = 0;     
-                    c16sp_ins_addi_l1   = 0;         
-                    c_ins_srli_l1       = 0;     
-                    c_ins_srai_l1       = 0;     
-                    c_ins_andi_l1       = 0;     
-                    c_ins_and_l1        = 0;     
-                    c_ins_or_l1         = 0;     
-                    c_ins_xor_l1        = 0;     
-                    c_ins_sub_l1        = 0;     
-                    c_ins_beq_l1        = 1;     
-                    c_ins_bne_l1        = 0;    
-                end 
-            3'b111: 
-                begin
-                    c_jump_en_l1        = 0;     
-                    c_clear_l1          = 0; 
-                    c_ins_addi_l1       = 0;     
-                    c_ins_lui_l1        = 0;     
-                    c16sp_ins_addi_l1   = 0;         
-                    c_ins_srli_l1       = 0;     
-                    c_ins_srai_l1       = 0;     
-                    c_ins_andi_l1       = 0;     
-                    c_ins_and_l1        = 0;     
-                    c_ins_or_l1         = 0;     
-                    c_ins_xor_l1        = 0;     
-                    c_ins_sub_l1        = 0;     
-                    c_ins_beq_l1        = 0;     
-                    c_ins_bne_l1        = 1;    
-                end 
-            default:
-                begin
-                    c_jump_en_l1        = 0;     
-                    c_clear_l1          = 0; 
-                    c_ins_addi_l1       = 0;     
-                    c_ins_lui_l1        = 0;     
-                    c16sp_ins_addi_l1   = 0;         
-                    c_ins_srli_l1       = 0;     
-                    c_ins_srai_l1       = 0;     
-                    c_ins_andi_l1       = 0;     
-                    c_ins_and_l1        = 0;     
-                    c_ins_or_l1         = 0;     
-                    c_ins_xor_l1        = 0;     
-                    c_ins_sub_l1        = 0;     
-                    c_ins_beq_l1        = 0;     
-                    c_ins_bne_l1        = 0;    
-                end 
-        endcase
-    else begin
-        c_jump_en_l1        = 0;     
-        c_clear_l1          = 0; 
-        c_ins_addi_l1       = 0;     
-        c_ins_lui_l1        = 0;     
-        c16sp_ins_addi_l1   = 0;         
-        c_ins_srli_l1       = 0;     
-        c_ins_srai_l1       = 0;     
-        c_ins_andi_l1       = 0;     
-        c_ins_and_l1        = 0;     
-        c_ins_or_l1         = 0;     
-        c_ins_xor_l1        = 0;     
-        c_ins_sub_l1        = 0;     
-        c_ins_beq_l1        = 0;     
-        c_ins_bne_l1        = 0; 
-    end
-end
+    //压缩指令译码
 
-always_comb begin
-    if(opcode[1 : 0] == 2'b10)
-        case(funct3)
-            3'b000: begin
-                c_ins_slli_l1   = 1;
-                csp_ins_lw_l1   = 0;
-                c_ins_jalr_l1   = 0;
-                cmv_ins_add_l1  = 0;
-                c_ins_add_l1    = 0;
-                csp_ins_sw_l1   = 0;
-            end
-            3'b010: begin 
-                c_ins_slli_l1   = 0;
-                csp_ins_lw_l1   = 1;
-                c_ins_jalr_l1   = 0;
-                cmv_ins_add_l1  = 0;
-                c_ins_add_l1    = 0;
-                csp_ins_sw_l1   = 0;
-            end
-            3'b100: begin
-                    c_ins_slli_l1   = 0;
-                    csp_ins_lw_l1   = 0;
-                    csp_ins_sw_l1   = 0;
-                    unique if((ins_l1[12] == 1) && (rs1_l1 != 'd0) && (rs2_l1 == 'd0))      begin c_ins_jalr_l1 = 1; cmv_ins_add_l1 = 0; c_ins_add_l1 = 0;  end
-                    else if(ins_l1[12] == 0)                                                begin cmv_ins_add_l1  = 1; c_ins_jalr_l1 = 0; c_ins_add_l1 = 0; end 
-                    else if((ins_l1[12] == 1) && (rs2_l1 != 'd0) && (rs2_l1 != 'd0))        begin c_ins_add_l1 = 1; c_ins_jalr_l1 = 0; cmv_ins_add_l1 = 0;  end//TODO
-                    else                                                                    begin c_ins_add_l1 = 0; c_ins_jalr_l1 = 0; cmv_ins_add_l1 = 0;  end
-                end
-            3'b110: begin
-                    c_ins_slli_l1   = 0;
-                    csp_ins_lw_l1   = 0;
-                    c_ins_jalr_l1   = 0;
-                    cmv_ins_add_l1  = 0;
-                    c_ins_add_l1    = 0;
-                    csp_ins_sw_l1   = 1;
-                end
+    wire c_opcode_00 = c_opcode == 2'b00;
+    wire c_opcode_01 = c_opcode == 2'b01;
+    wire c_opcode_10 = c_opcode == 2'b10;
 
-            default:
-                begin
-                    c_ins_slli_l1   = 0;
-                    csp_ins_lw_l1   = 0;
-                    c_ins_jalr_l1   = 0;
-                    cmv_ins_add_l1  = 0;
-                    c_ins_add_l1    = 0;
-                    csp_ins_sw_l1   = 0;
-                end
-        endcase
-    else begin
-        c_ins_slli_l1   = 0;
-        csp_ins_lw_l1   = 0;
-        c_ins_jalr_l1   = 0;
-        cmv_ins_add_l1  = 0;
-        c_ins_add_l1    = 0;
-        csp_ins_sw_l1   = 0;
-    end
-end
+    wire [1:0] cs_funct2 = ins_l1[6:5];
+    wire [1:0] cb_funct2 = ins_l1[11:10];
+    wire [2:0] c_funct3 = ins_l1[15:13];
 
-///////////////////////////////////////////
-//get registers
-///////////////////////////////////////////
-//rd
-always_comb begin
-    if(ins_c_l1) 
-        if(opcode[1:0] == 'b00 && funct3 < 'b100)
-            rd_l1 = {2'b01, ins_l1[4 : 2]}; /* 高位没有补01, 你需要把3位扩成5位, 同时+8, 所以补01, 下面的 rs1 和 rs2 也要改 check*/
-        else if(opcode[1:0] == 'b01 && funct3 == 'b100)
-            rd_l1 = {2'b01, ins_l1[9 : 7]};
-        else
-            rd_l1 = ins_l1[11 : 7];
-    else
-        rd_l1 = ins_l1[11 : 7];
-end
+    wire c_funct3_000 = c_funct3 == 3'b000;
+    wire c_funct3_001 = c_funct3 == 3'b001;
+    wire c_funct3_010 = c_funct3 == 3'b010;
+    wire c_funct3_011 = c_funct3 == 3'b011;
+    wire c_funct3_100 = c_funct3 == 3'b100;
+    wire c_funct3_101 = c_funct3 == 3'b101;
+    wire c_funct3_110 = c_funct3 == 3'b110;
+    wire c_funct3_111 = c_funct3 == 3'b111;
 
-//rs1
-always_comb begin
-    if(ins_c_l1) begin
-        if(((opcode == 2'b01) && (funct3 == 3'b100)) || (opcode == 2'b00))
-            rs1_l1 = {2'b01, ins_l1[9 : 7]};
-        else if(opcode == 2'b10 && funct3 == 3'b100 && ins_l1[12] == 0)
-            rs1_l1 = 5'd0;       
-        else
-            rs1_l1 = ins_l1[11 : 7];
-    end
-    else
-        rs1_l1 = ins_l1[19 : 15];
-end
+    wire cb_funct2_00 = cb_funct2 == 2'b00;
+    wire cb_funct2_01 = cb_funct2 == 2'b01;
+    wire cb_funct2_10 = cb_funct2 == 2'b10;
+    wire cb_funct2_11 = cb_funct2 == 2'b11;
 
-//rs2
-always_comb begin
-    if(ins_c_l1) begin
-        rs2_l1 = {2'b01, ins_l1[4 : 2]};
-    end    
-    else 
-        rs2_l1 = ins_l1[24 : 20];
-end
+    wire c_funct6_100011 = c_funct3_100 && ins_l1[12:10] == 3'b011;
 
-///////////////////////////////////////////
-//get imm & jal_addr operate
-///////////////////////////////////////////
-always_comb begin
-    if(ins_c_l1) begin
-        if(opcode[1 : 0] == 2'b00)
-            case(funct3)
-                3'b000: begin imm_l1 = {{25{ins_l1[10]}}, ins_l1[9:7], ins_l1[12:11], ins_l1[5], ins_l1[6]};jump_addr_l1 = 32'h00;  end //sign
-                3'b010: begin imm_l1 = {{26'b0},ins_l1[12:10],ins_l1[6],2'b00}; jump_addr_l1 = 32'h00;                      end
-                3'b110: begin imm_l1 = {{26'b0},ins_l1[12:10],ins_l1[6],2'b00}; jump_addr_l1 = 32'h00;                      end
-                default:
-                    begin
-                        imm_l1 = 32'h00;
-                        jump_addr_l1 = 32'h00;  
-                    end
-            endcase
-        else if(opcode[1 : 0] == 2'b01)
-            case(funct3)
-                3'b001: 
-                    begin
-                        imm_l1  = {{21{ins_l1[12]}}, ins_l1[8], ins_l1[10:9], ins_l1[6], ins_l1[7],ins_l1[2], ins_l1[11],ins_l1[5:3],1'b0};
-                        jump_addr_l1 = {{21{ins_l1[12]}}, ins_l1[8], ins_l1[10:9], ins_l1[6], ins_l1[7],ins_l1[2], ins_l1[11],ins_l1[5:3],1'b0};
-                    end
-                3'b010: begin imm_l1 = {26'b0,ins_l1[12],ins_l1[6:2]}; jump_addr_l1 = 32'h00; end
-                3'b101: 
-                    begin
-                        imm_l1 = {{21{ins_l1[12]}}, ins_l1[8], ins_l1[10:9], ins_l1[6], ins_l1[7],ins_l1[2], ins_l1[11],ins_l1[5:3],1'b0};
-                        jump_addr_l1 = {{21{ins_l1[12]}}, ins_l1[8], ins_l1[10:9], ins_l1[6], ins_l1[7],ins_l1[2], ins_l1[11],ins_l1[5:3],1'b0};
-                    end
-                3'b110: begin imm_l1 = {{24{ins_l1[12]}}, ins_l1[6:5], ins_l1[2], ins_l1[11:10], ins_l1[4:3], 1'b0}; jump_addr_l1 = 32'h00; end
-                3'b111: begin imm_l1 = {{24{ins_l1[12]}}, ins_l1[6:5], ins_l1[2], ins_l1[11:10], ins_l1[4:3], 1'b0}; jump_addr_l1 = 32'h00; end
-                default:
-                    begin
-                        imm_l1 = 32'h00;
-                        jump_addr_l1 = 32'h00;
-                    end
-            endcase
-        else if(opcode[1 : 0] == 2'b10)
-            case(funct3)
-                3'b010: begin imm_l1 = {{24'b0},ins_l1[3:2], ins_l1[12], ins_l1[6:4],2'b00}; jump_addr_l1 = 32'h00;  end           
-                3'b110: begin imm_l1 = {{25'b0}, ins_l1[8:7], ins_l1[11:9], 2'b00};           jump_addr_l1 = 32'h00;  end   
-                default:
-                    begin
-                        imm_l1 = 32'h00;
-                        jump_addr_l1 = 32'h00;  
-                    end
-            endcase
-        else begin
-            imm_l1 = 32'h00;
-            jump_addr_l1 = 32'h00;  
-        end
-    end
-    else if(opcode == 'b0110111 || opcode == 'b0010111) begin
-        imm_l1 = {ins_l1[31 : 12],12'b0};
-        jump_addr_l1 = 32'h00;  
-    end
-    else if((opcode == 'b1100011)) begin
-        imm_l1 = {{21{ins_l1[31]}}, ins_l1[7], ins_l1[30:25], ins_l1[11:8]}; //sign imm
-        jump_addr_l1 = 32'h00;  
-    end
-    else if((opcode == 'b0000011) || (opcode == 'b0010011)) begin
-        jump_addr_l1 = 32'h00;  
-        imm_l1 = {{22{ins_l1[31]}}, ins_l1[31 : 20]};
-    end
-    else if(opcode == 'b1101111) begin
-        jump_addr_l1 = {{19{ins_l1[31]}}, ins_l1[19:12], ins_l1[20], ins_l1[30:21]};
-        imm_l1 = 32'h00; //sign imm and jal_addr!!
-    end
-    else if((opcode == 'b0100011)) begin
-        imm_l1 = {20'b0, ins_l1[31 : 25], ins_l1[11 : 7]};
-        jump_addr_l1 = 32'h00;  
-    end
-    else begin
-        imm_l1 = 32'h00; /* 虽然这么写没问题, 但是为啥要写5个0 ^v^ check*/
-        jump_addr_l1 = 32'h00;
-    end
-end
+    wire cs_funct2_00 = cs_funct2 == 2'b00;
+    wire cs_funct2_01 = cs_funct2 == 2'b01;
+    wire cs_funct2_10 = cs_funct2 == 2'b10;
+    wire cs_funct2_11 = cs_funct2 == 2'b11;
+
+    wire c_funct4_1000 = c_funct3_100 && ins_l1[12] == 1'd0;
+    wire c_funct4_1001 = c_funct3_100 && ins_l1[12] == 1'd1;
+
+    wire c_ins_lw = c_opcode_00 && c_funct3_010;
+    wire type_cl = c_ins_lw;
+
+    wire c_ins_sw = c_opcode_00 && c_funct3_110;
+    wire c_ins_and_or_xor_sub = c_opcode_01 && c_funct6_100011;
+    wire c_ins_and = c_ins_and_or_xor_sub && cs_funct2_11;
+    wire c_ins_or = c_ins_and_or_xor_sub && cs_funct2_10;
+    wire c_ins_xor = c_ins_and_or_xor_sub && cs_funct2_01;
+    wire c_ins_sub = c_ins_and_or_xor_sub && cs_funct2_00;
+    wire type_cs = c_ins_sw || c_ins_and_or_xor_sub;
+
+    wire c_ins_j = c_opcode_01 && c_funct3_101;
+    wire c_ins_jal = c_opcode_01 && c_funct3_001;
+    wire type_cj = c_ins_j || c_ins_jal;
+
+    wire c_ins_beqz = c_opcode_01 && c_funct3_110;
+    wire c_ins_bneqz = c_opcode_01 && c_funct3_111;
+    wire c_ins_srli = c_opcode_01 && c_funct3_100 && cb_funct2_00;
+    wire c_ins_srai = c_opcode_01 && c_funct3_100 && cb_funct2_01;
+    wire c_ins_andi = c_opcode_01 && c_funct3_100 && cb_funct2_10;
+    wire type_cb = c_ins_beqz || c_ins_bneqz || c_ins_srli || c_ins_srai || c_ins_andi;
+
+    wire c_ins_lwsp = c_opcode_10 && c_funct3_010;
+    wire c_ins_li = c_opcode_01 && c_funct3_010;
+    wire c_ins_lui_addi16sp = c_opcode_01 && c_funct3_011;
+    wire c_rd_eq_2 = ins_l1[11:7] == 5'd2;
+    wire c_ins_lui = c_ins_lui_addi16sp && !c_rd_eq_2;
+    wire c_ins_addi = c_opcode_01 && c_funct3_000;
+    wire c_ins_addi16sp = c_ins_lui_addi16sp && c_rd_eq_2;
+    wire c_ins_slli = c_opcode_10 && c_funct3_000;
+    wire type_ci = c_ins_lwsp || c_ins_li || c_ins_lui_addi16sp || c_ins_addi || c_ins_slli;
+
+    wire c_ins_addi4spn = c_opcode_00 && c_funct3_000;
+    wire type_ciw = c_ins_addi4spn;
+
+    wire c_ins_swsp = c_opcode_10 && c_funct3_110;
+    wire type_css = c_ins_swsp;
+
+    wire c_ins_jr_mv = c_opcode_10 && c_funct4_1000;
+    wire c_ins_jalr_add = c_opcode_10 && c_funct4_1001;
+    wire c_rs2_eq_0 = ins_l1[6:2] == 5'd0;
+    wire c_ins_jr = c_ins_jr_mv && c_rs2_eq_0;
+    wire c_ins_mv = c_ins_jr_mv && !c_rs2_eq_0;
+    wire c_ins_jalr = c_ins_jalr_add && c_rs2_eq_0;
+    wire c_ins_add = c_ins_jalr_add && !c_rs2_eq_0;
+    wire type_cr = c_ins_jr_mv || c_ins_jalr_add;
+
+    wire [4:0] c_rd =
+        ((c_ins_jal || c_ins_jalr)                                          ? 5'd1                  : 5'd0) |
+        (((type_cr && !c_ins_jr && !c_ins_jalr) || type_ci)                 ? ins_l1[11:7]          : 5'd0) |
+        ((type_ciw || type_cl)                                              ? {2'b01, ins_l1[4:2]}  : 5'd0) |
+        (((type_cs && !c_ins_sw) || c_ins_slli || c_ins_srli || c_ins_srai) ? {2'b01, ins_l1[9:7]}  : 5'd0)
+    ;
+
+    wire [4:0] c_rs1 =
+        ((type_cr && !c_ins_mv)                ? ins_l1[11:7]          : 5'd0) |
+        ((c_ins_lwsp || type_css || type_ciw)  ? 5'd2                  : 5'd0) |
+        ((type_ci && !c_ins_lwsp && !c_ins_li) ? ins_l1[11:7]          : 5'd0) |
+        ((type_cl || type_cs || type_cb)       ? {2'b01, ins_l1[9:7]}  : 5'd0)
+    ;
+
+    wire [4:0] c_rs2 =  
+        ((c_ins_mv || c_ins_add)  ? ins_l1[6:2]           : 5'd0) |
+        (type_css                 ? ins_l1[6:2]           : 5'd0) |
+        (type_cs                  ? {2'b01, ins_l1[4:2]}  : 5'd0)
+    ;
+    wire [31:0] c_imm =  
+        (c_ins_lwsp                                ? {24'd0, ins_l1[3:2], ins_l1[12], ins_l1[6:4], 2'b00}                                                                      : 32'd0) |  
+        ((c_ins_li || c_ins_addi || c_ins_andi)    ? {{26{ins_l1[12]}}, ins_l1[12], ins_l1[6:2]}                                                                               : 32'd0) |  
+        (c_ins_lui                                 ? {{14{ins_l1[12]}}, ins_l1[12], ins_l1[6:2], 12'd0}                                                                        : 32'd0) |  
+        (c_ins_addi16sp                            ? {{22{ins_l1[12]}}, ins_l1[12], ins_l1[4:3], ins_l1[5], ins_l1[2], ins_l1[6], 4'd0}                                        : 32'd0) |  
+        ((c_ins_slli || c_ins_srli || c_ins_srai)  ? {26'd0, ins_l1[12], ins_l1[6:2]}                                                                                          : 32'd0) |  
+        (type_css                                  ? {24'd0, ins_l1[8:7], ins_l1[12:9], 2'b00}                                                                                 : 32'd0) |  
+        (type_ciw                                  ? {22'd0, ins_l1[10:7], ins_l1[12:11], ins_l1[5], ins_l1[6], 2'b0}                                                          : 32'd0) |  
+        ((type_cl || c_ins_sw)                     ? {25'd0, ins_l1[5], ins_l1[12:10], ins_l1[6], 2'b0}                                                                        : 32'd0) |  
+        ((c_ins_beqz || c_ins_bneqz)               ? {{23{ins_l1[12]}}, ins_l1[12], ins_l1[6:5], ins_l1[2], ins_l1[11:10], ins_l1[4:3], 1'd0}                                  : 32'd0) |  
+        ((c_ins_j || c_ins_jal)                    ? {{20{ins_l1[12]}}, ins_l1[12], ins_l1[8], ins_l1[10:9], ins_l1[6], ins_l1[7], ins_l1[2], ins_l1[11], ins_l1[5:3], 1'd0}   : 32'd0)
+    ;
+
+    assign jump_en_l1   = ins_jal_l1;
+    assign clear_l1     = ins_jal_l1;
+    assign jump_addr_l1 = pc_l1 + imm_l1;
+
+    assign imm_l1       = ins_c_l1 ? c_imm : imm;
+    assign rd_l1        = ins_c_l1 ? c_rd : rd;
+    assign rs1_l1       = ins_c_l1 ? c_rs1 : rs1;
+    assign rs2_l1       = ins_c_l1 ? c_rs2 : rs2;
+
+    assign ins_lui_l1   = ins_lui || c_ins_lui;
+    assign ins_auipc_l1 = ins_auipc;
+    assign ins_jal_l1   = ins_jal || c_ins_j || c_ins_jal;
+    assign ins_jalr_l1  = ins_jalr || c_ins_jr || c_ins_jalr;
+    assign ins_beq_l1   = ins_beq || c_ins_beqz;
+    assign ins_bne_l1   = ins_bne || c_ins_bneqz;
+    assign ins_blt_l1   = ins_blt;
+    assign ins_bge_l1   = ins_bge;
+    assign ins_bltu_l1  = ins_bltu;
+    assign ins_bgeu_l1  = ins_bgeu;
+    assign ins_lb_l1    = ins_lb;
+    assign ins_lh_l1    = ins_lh;
+    assign ins_lw_l1    = ins_lw || c_ins_lwsp || c_ins_lw;
+    assign ins_lbu_l1   = ins_lbu;
+    assign ins_lhu_l1   = ins_lhu;
+    assign ins_sb_l1    = ins_sb;
+    assign ins_sh_l1    = ins_sh;
+    assign ins_sw_l1    = ins_sw || c_ins_sw || c_ins_swsp;
+    assign ins_addi_l1  = ins_addi || c_ins_li || c_ins_addi || c_ins_addi16sp || c_ins_addi4spn;
+    assign ins_slti_l1  = ins_slti;
+    assign ins_sltiu_l1 = ins_sltiu;
+    assign ins_xori_l1  = ins_xori;
+    assign ins_ori_l1   = ins_ori;
+    assign ins_andi_l1  = ins_andi || c_ins_andi;
+    assign ins_slli_l1  = ins_slli || c_ins_slli;
+    assign ins_srli_l1  = ins_srli || c_ins_srli;
+    assign ins_srai_l1  = ins_srai || c_ins_srai;
+    assign ins_add_l1   = ins_add || c_ins_mv || c_ins_add;
+    assign ins_sub_l1   = ins_sub || c_ins_sub;
+    assign ins_sll_l1   = ins_sll;
+    assign ins_slt_l1   = ins_slt;
+    assign ins_sltu_l1  = ins_sltu;
+    assign ins_xor_l1   = ins_xor || c_ins_xor;
+    assign ins_srl_l1   = ins_srl;
+    assign ins_sra_l1   = ins_sra;
+    assign ins_or_l1    = ins_or || c_ins_or;
+    assign ins_and_l1   = ins_and || c_ins_and;
+
+
+
+
 endmodule
